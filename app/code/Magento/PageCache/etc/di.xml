@@ -44,9 +44,6 @@
             </argument>
         </arguments>
     </type>
-    <type name="Magento\Framework\View\Element\FormKey">
-        <plugin name="page_cache_inline_form_key_updater" type="Magento\PageCache\Plugin\InlineFormKeyUpdater"/>
-    </type>
     <preference for="Magento\PageCache\Model\VclGeneratorInterface" type="Magento\PageCache\Model\Varnish\VclGenerator"/>
     <preference for="Magento\PageCache\Model\VclTemplateLocatorInterface" type="Magento\PageCache\Model\Varnish\VclTemplateLocator"/>
     <preference for="Magento\PageCache\Model\Spi\PageCacheTagsPreprocessorInterface" type="Magento\PageCache\Model\PageCacheTagsPreprocessorComposite"/>
