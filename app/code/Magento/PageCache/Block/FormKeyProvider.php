@@ -2,7 +2,6 @@
 /**
  * Copyright © Magento, Inc. All rights reserved.
  * See COPYING.txt for license details.
- * @api
  */
 declare(strict_types=1);
 
@@ -13,6 +12,7 @@ use Magento\PageCache\Model\Config;
 
 /**
  * Adds script to update form key from cookie after script rendering
+ * @api
  */
 class FormKeyProvider extends Template
 {
