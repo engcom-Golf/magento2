@@ -67,16 +67,21 @@ define([
     });
 
     describe('Testing FormKey Widget', function () {
-        var wdContainer, inputContainer;
+        var wdContainer, inputContainer, element;
 
         beforeEach(function () {
             wdContainer = $('<div />');
             inputContainer = $('<input />');
+            element = $('<input />');
+
+            $('body')
+                .append(element);
         });
 
         afterEach(function () {
             $(wdContainer).remove();
             $(inputContainer).remove();
+            $(element).remove();
         });
 
         it('widget extends jQuery object', function () {
@@ -108,8 +113,11 @@ define([
         });
 
         it('widget exists on load on body', function (done) {
-            $(function () {
-                expect($('body').data('mageFormKey')).toBeDefined();
+            require(["Magento_PageCache/js/page-cache"], function () {
+                dispatchEvent(new Event('load'));
+                console.log('dispatched');
+                expect(element.val()).toEqual($.mage.cookies.get('form_key'));
+                console.log('executed');
                 done();
             });
         });

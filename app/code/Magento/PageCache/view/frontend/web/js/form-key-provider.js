@@ -7,6 +7,7 @@ define(function () {
 
     return function () {
         var formKey,
+            inputElements,
             inputSelector = 'input[name="form_key"]';
 
         /**
@@ -52,7 +53,7 @@ define(function () {
         }
 
         /**
-         * Generate cookie string
+         * Generate form key string
          * @private
          */
         function generateFormKeyString() {
@@ -67,16 +68,25 @@ define(function () {
             return result;
         }
 
-        formKey = getFormKeyCookie();
-
-        if (!formKey) {
-            formKey = generateFormKeyString();
-            setFormKeyCookie(formKey);
-        }
-        document.querySelectorAll(inputSelector).forEach(
-            function (element) {
-                element.setAttribute('value', formKey);
+        /**
+         * Init form_key inputs with value
+         * @private
+         */
+        function initFormKey() {
+            formKey = getFormKeyCookie();
+            console.log('provider');
+            if (!formKey) {
+                formKey = generateFormKeyString();
+                setFormKeyCookie(formKey);
             }
-        );
+            inputElements = document.querySelectorAll(inputSelector);
+            if (inputElements.length) {
+                Array.prototype.forEach.call(inputElements, function (element) {
+                    element.setAttribute('value', formKey);
+                });
+            }
+        }
+
+        initFormKey();
     };
 });

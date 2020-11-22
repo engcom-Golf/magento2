@@ -12,7 +12,6 @@ use Magento\PageCache\Model\Config;
 
 /**
  * Adds script to update form key from cookie after script rendering
- * @api
  */
 class FormKeyProvider extends Template
 {

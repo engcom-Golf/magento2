@@ -10,8 +10,27 @@ define([
     'Magento_PageCache/js/form-key-provider',
     'jquery-ui-modules/widget',
     'mage/cookies'
-], function ($, domReady, consoleLogger, FormKeyInit) {
+], function ($, domReady, consoleLogger, formKeyInit) {
     'use strict';
+
+    /**
+     * Helper. Generate random string
+     * TODO: Merge with mage/utils
+     * @param {String} chars - list of symbols
+     * @param {Number} length - length for need string
+     * @returns {String}
+     */
+    function generateRandomString(chars, length) {
+        var result = '';
+
+        length = length > 0 ? length : 1;
+
+        while (length--) {
+            result += chars[Math.round(Math.random() * (chars.length - 1))];
+        }
+
+        return result;
+    }
 
     /**
      * Nodes tree to flat list converter
@@ -84,12 +103,27 @@ define([
      * @deprecated
      */
     $.widget('mage.formKey', {
+        options: {
+            inputSelector: 'input[name="form_key"]',
+            allowedCharacters: '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ',
+            length: 16
+        },
+
         /**
          * Creates widget 'mage.formKey'
          * @private
          */
         _create: function () {
-            FormKeyInit();
+            var formKey = $.mage.cookies.get('form_key'),
+                options = {
+                    secure: window.cookiesConfig ? window.cookiesConfig.secure : false
+                };
+
+            if (!formKey) {
+                formKey = generateRandomString(this.options.allowedCharacters, this.options.length);
+                $.mage.cookies.set('form_key', formKey, options);
+            }
+            $(this.options.inputSelector).val(formKey);
         }
     });
 
@@ -266,7 +300,8 @@ define([
     });
 
     domReady(function () {
-        FormKeyInit();
+        console.log('domReadyFunction')
+        formKeyInit();
     });
 
     return {
