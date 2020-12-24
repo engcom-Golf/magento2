@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace Magento\Bundle\Model\Sales\Order\Pdf\Items;
 
+use Magento\Framework\App\ObjectManager;
 use Magento\Framework\Data\Collection\AbstractDb;
 use Magento\Framework\Filesystem;
 use Magento\Framework\Filter\FilterManager;
@@ -15,6 +16,7 @@ use Magento\Framework\Model\ResourceModel\AbstractResource;
 use Magento\Framework\Registry;
 use Magento\Framework\Serialize\Serializer\Json;
 use Magento\Framework\Stdlib\StringUtils;
+use Magento\Sales\Model\Order\Pdf\Items\Invoice\PreparePriceLines;
 use Magento\Tax\Helper\Data;
 
 /**
@@ -28,6 +30,11 @@ class Invoice extends AbstractItems
     protected $string;
 
     /**
+     * @var PreparePriceLines
+     */
+    private $preparePriceLines;
+
+    /**
      * Constructor
      *
      * @param Context $context
@@ -37,9 +44,10 @@ class Invoice extends AbstractItems
      * @param FilterManager $filterManager
      * @param StringUtils $coreString
      * @param Json $serializer
-     * @param AbstractResource $resource
-     * @param AbstractDb $resourceCollection
+     * @param AbstractResource|null $resource
+     * @param AbstractDb|null $resourceCollection
      * @param array $data
+     * @param PreparePriceLines|null $preparePricesLines
      * @SuppressWarnings(PHPMD.ExcessiveParameterList)
      */
     public function __construct(
@@ -50,9 +58,10 @@ class Invoice extends AbstractItems
         FilterManager $filterManager,
         StringUtils $coreString,
         Json $serializer,
-        AbstractResource $resource = null,
-        AbstractDb $resourceCollection = null,
-        array $data = []
+        ?AbstractResource $resource = null,
+        ?AbstractDb $resourceCollection = null,
+        array $data = [],
+        ?PreparePriceLines $preparePricesLines = null
     ) {
         $this->string = $coreString;
         parent::__construct(
@@ -66,6 +75,7 @@ class Invoice extends AbstractItems
             $resourceCollection,
             $data
         );
+        $this->preparePriceLines = $preparePricesLines ?? ObjectManager::getInstance()->get(PreparePriceLines::class);
     }
 
     /**
@@ -89,9 +99,9 @@ class Invoice extends AbstractItems
         $prevOptionId = '';
         $drawItems = [];
 
+        $lines = [];
         foreach ($items as $childItem) {
-            $line = [];
-
+            $i = array_key_last($lines) !== null ? array_key_last($lines) + 1 : 0;
             $attributes = $this->getSelectionAttributes($childItem);
             if (is_array($attributes)) {
                 $optionId = $attributes['option_id'];
@@ -104,15 +114,14 @@ class Invoice extends AbstractItems
             }
 
             if ($childItem->getOrderItem()->getParentItem() && $prevOptionId != $attributes['option_id']) {
-                $line[0] = [
+                $lines[$i][] = [
                     'font' => 'italic',
                     'text' => $this->string->split($attributes['option_label'], 45, true, true),
                     'feed' => 35,
                 ];
 
-                $drawItems[$optionId] = ['lines' => [$line], 'height' => 15];
-
-                $line = [];
+                $drawItems[$optionId] = ['height' => 15];
+                $i++;
                 $prevOptionId = $attributes['option_id'];
             }
 
@@ -124,7 +133,7 @@ class Invoice extends AbstractItems
                 $feed = 35;
                 $name = $childItem->getName();
             }
-            $line[] = ['text' => $this->string->split($name, 35, true, true), 'feed' => $feed];
+            $lines[$i][] = ['text' => $this->string->split($name, 35, true, true), 'feed' => $feed];
 
             // draw SKUs
             if (!$childItem->getOrderItem()->getParentItem()) {
@@ -132,24 +141,23 @@ class Invoice extends AbstractItems
                 foreach ($this->string->split($item->getSku(), 17) as $part) {
                     $text[] = $part;
                 }
-                $line[] = ['text' => $text, 'feed' => 255];
+                $lines[$i][] = ['text' => $text, 'feed' => 255];
+                $i++;
             }
 
             // draw prices
             if ($this->canShowPriceInfo($childItem)) {
-                $price = $order->formatPriceTxt($childItem->getPrice());
-                $line[] = ['text' => $price, 'feed' => 395, 'font' => 'bold', 'align' => 'right'];
-                $line[] = ['text' => $childItem->getQty() * 1, 'feed' => 435, 'font' => 'bold'];
+                $this->_item = $childItem;
+                $lines[$i][] = ['text' => $childItem->getQty() * 1, 'feed' => 435, 'align' => 'right'];
 
                 $tax = $order->formatPriceTxt($childItem->getTaxAmount());
-                $line[] = ['text' => $tax, 'feed' => 495, 'font' => 'bold', 'align' => 'right'];
+                $lines[$i][] = ['text' => $tax, 'feed' => 495, 'font' => 'bold', 'align' => 'right'];
 
-                $row_total = $order->formatPriceTxt($childItem->getRowTotal());
-                $line[] = ['text' => $row_total, 'feed' => 565, 'font' => 'bold', 'align' => 'right'];
+                $this->preparePriceLines->execute($this->getItemPricesForDisplay(), $lines);
             }
 
-            $drawItems[$optionId]['lines'][] = $line;
         }
+        $drawItems[$optionId]['lines'] = $lines;
 
         // custom options
         $options = $item->getOrderItem()->getProductOptions();

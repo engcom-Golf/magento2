@@ -5,46 +5,67 @@
  */
 namespace Magento\Downloadable\Model\Sales\Order\Pdf\Items;
 
+use Magento\Downloadable\Model\Link\PurchasedFactory;
+use Magento\Downloadable\Model\ResourceModel\Link\Purchased\Item\CollectionFactory;
+use Magento\Framework\App\Config\ScopeConfigInterface;
+use Magento\Framework\App\ObjectManager;
+use Magento\Framework\Data\Collection\AbstractDb;
+use Magento\Framework\Filesystem;
+use Magento\Framework\Filter\FilterManager;
+use Magento\Framework\Model\Context;
+use Magento\Framework\Model\ResourceModel\AbstractResource;
+use Magento\Framework\Registry;
+use Magento\Framework\Stdlib\StringUtils;
+use Magento\Sales\Model\Order\Pdf\Items\Invoice\PreparePriceLines;
+use Magento\Tax\Helper\Data;
+
 /**
  * Order Invoice Downloadable Pdf Items renderer
+ *
  * @api
  * @since 100.0.2
  */
-class Invoice extends \Magento\Downloadable\Model\Sales\Order\Pdf\Items\AbstractItems
+class Invoice extends AbstractItems
 {
     /**
-     * @var \Magento\Framework\Stdlib\StringUtils
+     * @var StringUtils
      */
     protected $string;
+    /**
+     * @var PreparePriceLines|null
+     */
+    private $preparePriceLines;
 
     /**
-     * @param \Magento\Framework\Model\Context $context
-     * @param \Magento\Framework\Registry $registry
-     * @param \Magento\Tax\Helper\Data $taxData
-     * @param \Magento\Framework\Filesystem $filesystem
-     * @param \Magento\Framework\Filter\FilterManager $filterManager
-     * @param \Magento\Framework\App\Config\ScopeConfigInterface $scopeConfig
-     * @param \Magento\Downloadable\Model\Link\PurchasedFactory $purchasedFactory
-     * @param \Magento\Downloadable\Model\ResourceModel\Link\Purchased\Item\CollectionFactory $itemsFactory
-     * @param \Magento\Framework\Stdlib\StringUtils $string
-     * @param \Magento\Framework\Model\ResourceModel\AbstractResource $resource
-     * @param \Magento\Framework\Data\Collection\AbstractDb $resourceCollection
+     * @param Context $context
+     * @param Registry $registry
+     * @param Data $taxData
+     * @param Filesystem $filesystem
+     * @param FilterManager $filterManager
+     * @param ScopeConfigInterface $scopeConfig
+     * @param PurchasedFactory $purchasedFactory
+     * @param CollectionFactory $itemsFactory
+     * @param StringUtils $string
+     * @param AbstractResource|null $resource
+     * @param AbstractDb|null $resourceCollection
      * @param array $data
+     * @param PreparePriceLines|null $preparePriceLines
      * @SuppressWarnings(PHPMD.ExcessiveParameterList)
      */
     public function __construct(
-        \Magento\Framework\Model\Context $context,
-        \Magento\Framework\Registry $registry,
-        \Magento\Tax\Helper\Data $taxData,
-        \Magento\Framework\Filesystem $filesystem,
-        \Magento\Framework\Filter\FilterManager $filterManager,
-        \Magento\Framework\App\Config\ScopeConfigInterface $scopeConfig,
-        \Magento\Downloadable\Model\Link\PurchasedFactory $purchasedFactory,
-        \Magento\Downloadable\Model\ResourceModel\Link\Purchased\Item\CollectionFactory $itemsFactory,
-        \Magento\Framework\Stdlib\StringUtils $string,
-        \Magento\Framework\Model\ResourceModel\AbstractResource $resource = null,
-        \Magento\Framework\Data\Collection\AbstractDb $resourceCollection = null,
-        array $data = []
+        Context $context,
+        Registry $registry,
+        Data $taxData,
+        Filesystem $filesystem,
+        FilterManager $filterManager,
+        ScopeConfigInterface $scopeConfig,
+        PurchasedFactory $purchasedFactory,
+        CollectionFactory $itemsFactory,
+        StringUtils $string,
+        AbstractResource $resource = null,
+        AbstractDb $resourceCollection = null,
+        array $data = [],
+        PreparePriceLines $preparePriceLines = null
     ) {
         $this->string = $string;
         parent::__construct(
@@ -60,6 +81,7 @@ class Invoice extends \Magento\Downloadable\Model\Sales\Order\Pdf\Items\Abstract
             $resourceCollection,
             $data
         );
+        $this->preparePriceLines = $preparePriceLines ?? ObjectManager::getInstance()->get(PreparePriceLines::class);
     }
 
     /**
@@ -89,36 +111,6 @@ class Invoice extends \Magento\Downloadable\Model\Sales\Order\Pdf\Items\Abstract
         // draw QTY
         $lines[0][] = ['text' => $item->getQty() * 1, 'feed' => 435, 'align' => 'right'];
 
-        // draw item Prices
-        $i = 0;
-        $prices = $this->getItemPricesForDisplay();
-        $feedPrice = 395;
-        $feedSubtotal = $feedPrice + 170;
-        foreach ($prices as $priceData) {
-            if (isset($priceData['label'])) {
-                // draw Price label
-                $lines[$i][] = ['text' => $priceData['label'], 'feed' => $feedPrice, 'align' => 'right'];
-                // draw Subtotal label
-                $lines[$i][] = ['text' => $priceData['label'], 'feed' => $feedSubtotal, 'align' => 'right'];
-                $i++;
-            }
-            // draw Price
-            $lines[$i][] = [
-                'text' => $priceData['price'],
-                'feed' => $feedPrice,
-                'font' => 'bold',
-                'align' => 'right',
-            ];
-            // draw Subtotal
-            $lines[$i][] = [
-                'text' => $priceData['subtotal'],
-                'feed' => $feedSubtotal,
-                'font' => 'bold',
-                'align' => 'right',
-            ];
-            $i++;
-        }
-
         // draw Tax
         $lines[0][] = [
             'text' => $order->formatPriceTxt($item->getTaxAmount()),
@@ -126,6 +118,10 @@ class Invoice extends \Magento\Downloadable\Model\Sales\Order\Pdf\Items\Abstract
             'font' => 'bold',
             'align' => 'right',
         ];
+
+        // draw item Prices
+        $this->preparePriceLines->execute($this->getItemPricesForDisplay(), $lines);
+
 
         // custom options
         $options = $this->getItemOptions();

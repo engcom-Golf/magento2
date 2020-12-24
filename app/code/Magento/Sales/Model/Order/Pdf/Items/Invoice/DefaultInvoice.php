@@ -8,17 +8,26 @@ declare(strict_types=1);
 namespace Magento\Sales\Model\Order\Pdf\Items\Invoice;
 
 use Magento\Framework\App\ObjectManager;
+use Magento\Framework\Data\Collection\AbstractDb;
+use Magento\Framework\Filesystem;
+use Magento\Framework\Filter\FilterManager;
+use Magento\Framework\Model\Context;
+use Magento\Framework\Model\ResourceModel\AbstractResource;
+use Magento\Framework\Registry;
+use Magento\Framework\Stdlib\StringUtils;
+use Magento\Sales\Model\Order\Pdf\Items\AbstractItems;
 use Magento\Sales\Model\RtlTextHandler;
+use Magento\Tax\Helper\Data;
 
 /**
  * Sales Order Invoice Pdf default items renderer
  */
-class DefaultInvoice extends \Magento\Sales\Model\Order\Pdf\Items\AbstractItems
+class DefaultInvoice extends AbstractItems
 {
     /**
      * Core string
      *
-     * @var \Magento\Framework\Stdlib\StringUtils
+     * @var StringUtils
      */
     protected $string;
 
@@ -28,29 +37,36 @@ class DefaultInvoice extends \Magento\Sales\Model\Order\Pdf\Items\AbstractItems
     private $rtlTextHandler;
 
     /**
-     * @param \Magento\Framework\Model\Context $context
-     * @param \Magento\Framework\Registry $registry
-     * @param \Magento\Tax\Helper\Data $taxData
-     * @param \Magento\Framework\Filesystem $filesystem
-     * @param \Magento\Framework\Filter\FilterManager $filterManager
-     * @param \Magento\Framework\Stdlib\StringUtils $string
-     * @param \Magento\Framework\Model\ResourceModel\AbstractResource $resource
-     * @param \Magento\Framework\Data\Collection\AbstractDb $resourceCollection
+     * @var PreparePriceLines|mixed
+     */
+    private $preparePriceLines;
+
+    /**
+     * @param Context $context
+     * @param Registry $registry
+     * @param Data $taxData
+     * @param Filesystem $filesystem
+     * @param FilterManager $filterManager
+     * @param StringUtils $string
+     * @param AbstractResource|null $resource
+     * @param AbstractDb|null $resourceCollection
      * @param array $data
      * @param RtlTextHandler|null $rtlTextHandler
+     * @param PreparePriceLines|null $preparePricesLines
      * @SuppressWarnings(PHPMD.ExcessiveParameterList)
      */
     public function __construct(
-        \Magento\Framework\Model\Context $context,
-        \Magento\Framework\Registry $registry,
-        \Magento\Tax\Helper\Data $taxData,
-        \Magento\Framework\Filesystem $filesystem,
-        \Magento\Framework\Filter\FilterManager $filterManager,
-        \Magento\Framework\Stdlib\StringUtils $string,
-        \Magento\Framework\Model\ResourceModel\AbstractResource $resource = null,
-        \Magento\Framework\Data\Collection\AbstractDb $resourceCollection = null,
+        Context $context,
+        Registry $registry,
+        Data $taxData,
+        Filesystem $filesystem,
+        FilterManager $filterManager,
+        StringUtils $string,
+        ?AbstractResource $resource = null,
+        ?AbstractDb $resourceCollection = null,
         array $data = [],
-        ?RtlTextHandler $rtlTextHandler = null
+        ?RtlTextHandler $rtlTextHandler = null,
+        ?PreparePriceLines $preparePricesLines = null
     ) {
         $this->string = $string;
         parent::__construct(
@@ -63,7 +79,8 @@ class DefaultInvoice extends \Magento\Sales\Model\Order\Pdf\Items\AbstractItems
             $resourceCollection,
             $data
         );
-        $this->rtlTextHandler = $rtlTextHandler  ?: ObjectManager::getInstance()->get(RtlTextHandler::class);
+        $this->rtlTextHandler = $rtlTextHandler ?? ObjectManager::getInstance()->get(RtlTextHandler::class);
+        $this->preparePriceLines = $preparePricesLines ?? ObjectManager::getInstance()->get(PreparePriceLines::class);
     }
 
     /**
@@ -78,60 +95,35 @@ class DefaultInvoice extends \Magento\Sales\Model\Order\Pdf\Items\AbstractItems
         $pdf = $this->getPdf();
         $page = $this->getPage();
         $lines = [];
+        $i = 0;
 
         // draw Product name
-        $lines[0][] = [
+        $lines[$i][] = [
                 'text' => $this->string->split($this->prepareText((string)$item->getName()), 35, true, true),
                 'feed' => 35
         ];
 
         // draw SKU
-        $lines[0][] = [
+        $lines[$i][] = [
             'text' => $this->string->split($this->prepareText((string)$this->getSku($item)), 17),
             'feed' => 290,
             'align' => 'right',
         ];
 
         // draw QTY
-        $lines[0][] = ['text' => $item->getQty() * 1, 'feed' => 435, 'align' => 'right'];
+        $lines[$i][] = ['text' => $item->getQty() * 1, 'feed' => 435, 'align' => 'right'];
 
-        // draw item Prices
-        $i = 0;
-        $prices = $this->getItemPricesForDisplay();
-        $feedPrice = 395;
-        $feedSubtotal = $feedPrice + 170;
-        foreach ($prices as $priceData) {
-            if (isset($priceData['label'])) {
-                // draw Price label
-                $lines[$i][] = ['text' => $priceData['label'], 'feed' => $feedPrice, 'align' => 'right'];
-                // draw Subtotal label
-                $lines[$i][] = ['text' => $priceData['label'], 'feed' => $feedSubtotal, 'align' => 'right'];
-                $i++;
-            }
-            // draw Price
-            $lines[$i][] = [
-                'text' => $priceData['price'],
-                'feed' => $feedPrice,
-                'font' => 'bold',
-                'align' => 'right',
-            ];
-            // draw Subtotal
-            $lines[$i][] = [
-                'text' => $priceData['subtotal'],
-                'feed' => $feedSubtotal,
-                'font' => 'bold',
-                'align' => 'right',
-            ];
-            $i++;
-        }
 
         // draw Tax
-        $lines[0][] = [
+        $lines[$i][] = [
             'text' => $order->formatPriceTxt($item->getTaxAmount()),
             'feed' => 495,
             'font' => 'bold',
             'align' => 'right',
         ];
+
+        // draw item Prices
+        $this->preparePriceLines->execute($this->getItemPricesForDisplay(), $lines);
 
         // custom options
         $options = $this->getItemOptions();
